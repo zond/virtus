@@ -11,66 +11,67 @@ import (
 const root = "root"
 const children_format = "%s.c"
 
-type Thing interface{}
+type thing interface{}
 
-type Port chan Thing
+type port chan thing
 
 var redis = godis.New("", 0, "")
 
-type Object struct {
+type object struct {
 	id string
-	port Port
-	parent Port
-	children map[string]Port
-	state map[Thing]Thing
+	
+	port port
+	parent port
+	children map[string]port
+	state map[thing]thing
 }
-func CreateObject(id string) *Object {
-	return &Object{id: id, port: make(Port), children: make(map[string]Port)}
+func createObject(id string) *object {
+	return &object{id: id, port: make(port), children: make(map[string]port)}
 }
-func GetRoot() *Object {
-	rval := CreateObject(root)
-	rval.Load()
+func getRoot() *object {
+	rval := createObject(root)
+	rval.load()
 	return rval
 }
-func (self *Object) CreateChild() *Object {
-	rval := self.LoadChild(tools.Uuid())
+func (self *object) createChild() *object {
+	rval := self.loadChild(tools.Uuid())
 	return rval
 }
-func (self *Object) Load() {
+func (self *object) load() {
 	elem, err := redis.Get(self.id)
 	if err == nil {
 		json.Unmarshal(elem, &(self.state))
-		self.LoadChildren()
+		self.loadChildren()
 	} else if err.Error() == "Nonexisting key" {
-		self.state = make(map[Thing]Thing)
-		self.Save()
+		self.state = make(map[thing]thing)
+		self.save()
 	} else {
 		panic(fmt.Sprint("Unable to load ", self.id, ": ", err))
 	}
-	go self.Run()
+	go self.run()
 }
-func (self *Object) LoadChildren() {
+func (self *object) loadChildren() {
 	keys, err := redis.Smembers(fmt.Sprintf(children_format, self.id))
 	if err != nil {
 		panic(fmt.Sprint("Unable to load children of ", self, ": ", err))
 	}
 	for _, reply := range keys.Elems {
-		self.LoadChild(string(reply.Elem))
+		self.loadChild(string(reply.Elem))
 	}
 }
-func (self *Object) LoadChild(id string) *Object {
-	rval := CreateObject(id)
+func (self *object) loadChild(id string) *object {
+	rval := createObject(id)
 	rval.parent = self.port
 	self.children[rval.id] = rval.port
-	rval.Load()
+	rval.load()
 	return rval
 }
-func (self *Object) Run() {
+func (self *object) run() {
 	for t := range self.port {
 		fmt.Println("got", t)
 	}
 }
-func (self *Object) Save() {
+func (self *object) save() {
 	b, err := json.Marshal(self)
 	if err != nil {
 		panic(fmt.Sprint("Unable to marshal ", self, ": ", err))
@@ -92,6 +93,6 @@ func (self *Object) Save() {
 }
 
 func main() {
-	root := GetRoot()
+	root := getRoot()
 	fmt.Println(root)
 }
