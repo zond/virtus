@@ -49,11 +49,12 @@ func (self *object) createChild(id string) *object {
 func (self *object) loadAndBootChild(id string) *object {
 	return createObject(self.redis, id, self).loadAndBoot()
 }
-func (self *object) loadAndBoot() *object {
-	self.load()
+func (self *object) boot() *object {
 	go self.run()
-	self.loadAndBootChildren()
 	return self
+}
+func (self *object) loadAndBoot() *object {
+	return self.load().boot().loadAndBootChildren()
 }
 func (self *object) load() *object {
 	elem, err := self.redis.Get(self.id)
@@ -80,7 +81,7 @@ func (self *object) loadAndBootChildren() *object {
 }
 func (self *object) run() {
 	for t := range self.port {
-		fmt.Println("got", t)
+		fmt.Printf("%v got %v of type %T\n", self.id, t, t)
 	}
 }
 func (self *object) save() *object {

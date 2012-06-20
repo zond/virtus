@@ -28,7 +28,7 @@ func (self param) validate(t thing) bool {
 	return false
 }
 type params []param
-func (self params) validate(r resp) bool {
+func (self params) validate(r mess) bool {
 	if len(r.Params) != len(self) {
 		return false
 	}
@@ -44,11 +44,11 @@ type action struct {
 	Name string
 	Params params
 }
-func (self action) validate(r resp) bool {
+func (self action) validate(r mess) bool {
 	return r.Action == self.Name && self.Params.validate(r)
 }
 type actions []action
-func (self actions) validate(r resp) bool {
+func (self actions) validate(r mess) bool {
 	for _, a := range(self) {
 		if a.validate(r) {
 			return true
@@ -57,15 +57,15 @@ func (self actions) validate(r resp) bool {
 	return false
 }
 
-type mess struct {
+type query struct {
 	Desc string
 	Actions actions
 }
-func (self mess) validate(r resp) bool {
+func (self query) validate(r mess) bool {
 	return self.Actions.validate(r)
 }
 
-type resp struct {
+type mess struct {
 	Action string
 	Params []thing
 }

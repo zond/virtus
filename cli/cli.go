@@ -31,9 +31,9 @@ func receive(ws *websocket.Conn, c chan string) {
 }
 
 func read(c chan interface{}) {
-	var d interface{}
 	decoder := json.NewDecoder(os.Stdin)
 	for {
+		var d interface{}
 		if err := decoder.Decode(&d); err == nil {
 			c <- d
 		} else {
