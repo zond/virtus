@@ -12,6 +12,8 @@ const root = "root"
 const children_format = "%s.c"
 
 type thing interface{}
+type hash map[string]thing
+type ary []thing
 
 type port chan thing
 
@@ -19,11 +21,10 @@ var redis = godis.New("", 0, "")
 
 type object struct {
 	id string
-	
 	port port
 	parent port
 	children map[string]port
-	state map[thing]thing
+	state hash
 }
 func createObject(id string) *object {
 	return &object{id: id, port: make(port), children: make(map[string]port)}
@@ -43,7 +44,7 @@ func (self *object) load() {
 		json.Unmarshal(elem, &(self.state))
 		self.loadChildren()
 	} else if err.Error() == "Nonexisting key" {
-		self.state = make(map[thing]thing)
+		self.state = make(hash)
 		self.save()
 	} else {
 		panic(fmt.Sprint("Unable to load ", self.id, ": ", err))
@@ -94,5 +95,5 @@ func (self *object) save() {
 
 func main() {
 	root := getRoot()
-	fmt.Println(root)
+	newWebServer(root)
 }
