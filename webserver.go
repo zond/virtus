@@ -21,6 +21,7 @@ func newWebServer(r *object) *webServer {
 	return rval
 }
 func (self *webServer) handle(ws *websocket.Conn) {
+	defer ws.Close()
 	m := hash{
 		"desc": "Enter username and password", 
 		"actions" : hash{
@@ -34,6 +35,8 @@ func (self *webServer) handle(ws *websocket.Conn) {
 		for home == nil {
 			if err := websocket.JSON.Receive(ws, &resp); err == nil {
 				fmt.Println("got ", resp)
+			} else {
+				break
 			}
 		}
 	}
