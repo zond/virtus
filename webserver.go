@@ -4,8 +4,15 @@ package main
 import (
         "net/http"
         "code.google.com/p/go.net/websocket"
-	"fmt"
+	"log"
 )
+
+const LOGIN = "Login"
+const QUIT = "Quit"
+const STRING = "s"
+const ACTION = "action"
+const ACTIONS = "actions"
+const DESC = "desc"
 
 type webServer struct {
 	root *object
@@ -23,22 +30,28 @@ func newWebServer(r *object) *webServer {
 func (self *webServer) handle(ws *websocket.Conn) {
 	defer ws.Close()
 	m := hash{
-		"desc": "Enter username and password", 
-		"actions" : hash{
-			"Login" : ary{ ary{ "Username", "s" }, ary{ "Password", "s" }},
-			"Quit" : ary {},
+		DESC: "Enter username and password", 
+		ACTIONS : hash{
+			LOGIN : ary{ ary{ "Username", STRING }, ary{ "Password", STRING }},
+			QUIT : ary {},
 		},
 	}
 	if err := websocket.JSON.Send(ws, m); err == nil {
 		var home *object
-		var resp interface{}
+		var resp hash
 		for home == nil {
 			if err := websocket.JSON.Receive(ws, &resp); err == nil {
-				fmt.Println("got ", resp)
+				if resp[ACTION] == LOGIN {
+					log.Println("login from ", resp)
+				} else if resp[ACTION] == QUIT {
+					break
+				}
 			} else {
 				break
 			}
 		}
+	} else {
+		log.Println("While trying to send ", m, " to ", ws, ": ", err)
 	}
 }
 
