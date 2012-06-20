@@ -5,53 +5,73 @@ import (
         "net/http"
         "code.google.com/p/go.net/websocket"
 	"log"
+	"fmt"
 )
 
-const LOGIN = "Login"
-const QUIT = "Quit"
-const STRING = "s"
-const ACTION = "action"
-const ACTIONS = "actions"
-const DESC = "desc"
-
-type webServer struct {
-	root *object
-}
-func newWebServer(r *object) *webServer {
-	rval := &webServer{r}
+func (self *object) webServe() {
         err := http.ListenAndServe(":8080", websocket.Handler(func(ws *websocket.Conn) {
-		rval.handle(ws)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println(ws, ": ", r)
+			}
+			ws.Close()
+		}()
+		(&conn{ws, self}).authenticate()
 	}))
         if err != nil {
                 panic("While starting web socket server: " + err.Error())
         }
-	return rval
 }
-func (self *webServer) handle(ws *websocket.Conn) {
-	defer ws.Close()
-	m := hash{
-		DESC: "Enter username and password", 
-		ACTIONS : hash{
-			LOGIN : ary{ ary{ "Username", STRING }, ary{ "Password", STRING }},
-			QUIT : ary {},
-		},
+
+type conn struct {
+	conn *websocket.Conn
+	root *object
+}
+	
+func (self *conn) send(m mess) {
+	if err := websocket.JSON.Send(self.conn, m); err != nil {
+		panic(fmt.Sprint("While trying to send ", m, " to ", self.conn, ": ", err))
 	}
-	if err := websocket.JSON.Send(ws, m); err == nil {
-		var home *object
-		var resp hash
-		for home == nil {
-			if err := websocket.JSON.Receive(ws, &resp); err == nil {
-				if resp[ACTION] == LOGIN {
-					log.Println("login from ", resp)
-				} else if resp[ACTION] == QUIT {
-					break
-				}
-			} else {
+}
+func (self *conn) recv(r *resp) {
+	if err := websocket.JSON.Receive(self.conn, r); err != nil {
+		panic(fmt.Sprint("While trying to receive from ", self.conn, ": ", err))
+	}
+}
+func (self *conn) query(m mess) resp {
+	var r resp
+	for !m.validate(r) {
+		self.send(m)
+		self.recv(&r)
+	}
+	return r
+}
+func (self *conn) authenticate() {
+	var home *object
+	for home == nil {
+		resp := self.query(
+			mess{"Enter username and password", 
+			actions{action{LOGIN, params{ param{USERNAME, STRING}, param{PASSWORD, STRING}}},
+				action{QUIT, params{}}}})
+		if resp.Action == LOGIN {
+			if o := self.root.createChild(fmt.Sprintf(USER_ID_FORMAT, resp.Params[0].(string))).load(); o.fresh {
+				o.setPassword(resp.Params[1].(string))
+				self.send(mess{Desc: fmt.Sprint("Created new account ", resp.Params[0])})
 				break
+			} else {
+				if o.authenticate(resp.Params[1].(string)) {
+					self.send(mess{Desc: fmt.Sprint("Authenticated as ", resp.Params[0])})
+					break
+				} else {
+					self.send(
+						mess{"Bad username or password", 
+						actions{action{LOGIN, params{param{USERNAME, STRING}, param{PASSWORD, STRING}}},
+							action{QUIT, params{}}}})
+				}
 			}
+		} else if resp.Action == QUIT {
+			break
 		}
-	} else {
-		log.Println("While trying to send ", m, " to ", ws, ": ", err)
 	}
 }
 

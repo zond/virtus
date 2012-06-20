@@ -1,23 +1,28 @@
-
 package main
 
 import (
-	"github.com/simonz05/godis"
-	"fmt"
+	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/json"
+	"fmt"
+	"github.com/simonz05/godis"
+	"github.com/zond/tools"
 )
 
 type object struct {
-	id string
-	port port
-	parent port
+	id       string
+	password string
+	salt     string
+	port     port
+	parent   port
 	children map[string]port
-	state hash
-	fresh bool
-	redis *godis.Client
+	state    hash
+	fresh    bool
+	redis    *godis.Client
 }
+
 func createObject(redis *godis.Client, id string, parent *object) *object {
-	rval := &object{id: id, port: make(port), children: make(map[string]port), redis: redis}
+	rval := &object{id: id, port: make(port), children: make(map[string]port), redis: redis, password: tools.Uuid()}
 	if parent != nil {
 		rval.parent = parent.port
 		parent.children[rval.id] = rval.port
@@ -26,6 +31,17 @@ func createObject(redis *godis.Client, id string, parent *object) *object {
 }
 func loadAndBootRoot(redis *godis.Client) *object {
 	return createObject(redis, ROOT, nil).loadAndBoot()
+}
+func (self *object) authenticate(password string) bool {
+	h := sha1.New()
+	h.Write([]byte(self.salt))
+	return subtle.ConstantTimeCompare(h.Sum([]byte(password)), tools.NewBigIntString(self.password, tools.MAX_BASE).Bytes()) == 1
+}
+func (self *object) setPassword(password string) {
+	self.salt = tools.Uuid()
+	h := sha1.New()
+	h.Write([]byte(self.salt))
+	self.password = tools.NewBigIntBytes(h.Sum([]byte(password))).BaseString(tools.MAX_BASE)
 }
 func (self *object) createChild(id string) *object {
 	return createObject(self.redis, id, self)
@@ -88,4 +104,3 @@ func (self *object) save() *object {
 	}
 	return self
 }
-

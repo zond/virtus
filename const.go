@@ -1,4 +1,3 @@
-
 package main
 
 const ROOT = "root"

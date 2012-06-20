@@ -22,6 +22,7 @@ func receive(ws *websocket.Conn, c chan string) {
 		} else {
 			if err.Error() == "EOF" {
 				close(c)
+				break
 			} else {
 				log.Println("While trying to receive: ", err)
 			}
