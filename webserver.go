@@ -6,13 +6,18 @@ import (
         "code.google.com/p/go.net/websocket"
 	"log"
 	"fmt"
+	"io"
 )
+
+type EOF string
 
 func (self *object) webServe() {
         err := http.ListenAndServe(":8080", websocket.Handler(func(ws *websocket.Conn) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Println(ws, ": ", r)
+				if _, ok := r.(EOF); !ok {
+					log.Println(ws, ": ", r)
+				}
 			}
 			ws.Close()
 		}()
@@ -30,12 +35,22 @@ type conn struct {
 	
 func (self *conn) send(m mess) {
 	if err := websocket.JSON.Send(self.conn, m); err != nil {
-		panic(fmt.Sprint("While trying to send ", m, " to ", self.conn, ": ", err))
+		message := fmt.Sprint("While trying to send ", m, " to ", self.conn, ": ", err)
+		if err == io.EOF {
+			panic(EOF(message))
+		} else {
+			panic(message)
+		}
 	}
 }
 func (self *conn) recv(r *resp) {
 	if err := websocket.JSON.Receive(self.conn, r); err != nil {
-		panic(fmt.Sprint("While trying to receive from ", self.conn, ": ", err))
+		message := fmt.Sprint("While trying to receive from ", self.conn, ": ", err)
+		if err == io.EOF {
+			panic(EOF(message))
+		} else {
+			panic(message)
+		}
 	}
 }
 func (self *conn) query(m mess) resp {
