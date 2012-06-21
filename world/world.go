@@ -11,7 +11,10 @@ type persistenceFinder struct {
 }
 
 func (self *persistenceFinder) Find(s string) Object {
-	return findObject(self, s)
+	if rval := findObject(self, s); rval != nil {
+		return rval
+	}
+	return nil
 }
 func (self *persistenceFinder) Create(s, p string) Object {
 	o := createObject(self, s)

@@ -5,7 +5,6 @@ import (
 	"code.google.com/p/go.net/websocket"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 )
 
@@ -68,7 +67,7 @@ func (self *conn) start(f Finder) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(EOF); !ok {
-				log.Println(self, ": ", r)
+				panic(r)
 			}
 		}
 		self.Close()
