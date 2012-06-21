@@ -1,21 +1,21 @@
-
 package webserver
 
 import (
-        "net/http"
-        "code.google.com/p/go.net/websocket"
 	. "../"
-	"log"
+	"code.google.com/p/go.net/websocket"
 	"fmt"
 	"io"
+	"log"
+	"net/http"
 )
 
 type EOF string
 
 type message struct {
-	payload Thing
+	payload    Thing
 	returnPath chan Message
 }
+
 func (self *message) Payload() Thing {
 	return self.payload
 }
@@ -24,17 +24,18 @@ func (self *message) ReturnPath() chan Message {
 }
 
 func Serve(f Finder) {
-        err := http.ListenAndServe(":8080", websocket.Handler(func(ws *websocket.Conn) {
+	err := http.ListenAndServe(":8080", websocket.Handler(func(ws *websocket.Conn) {
 		(&conn{ws}).start(f)
 	}))
-        if err != nil {
-                panic("While starting web socket server: " + err.Error())
-        }
+	if err != nil {
+		panic("While starting web socket server: " + err.Error())
+	}
 }
 
 type conn struct {
 	*websocket.Conn
 }
+
 func (self *conn) send(t Thing) {
 	if err := websocket.JSON.Send(self.Conn, t); err != nil {
 		message := fmt.Sprint("While trying to send ", t, " to ", self.Conn, ": ", err)
@@ -96,15 +97,11 @@ func (self *conn) serve(o Object) {
 func (self *conn) authenticate(f Finder) Object {
 	for {
 		mess := self.query(
-			Query{"Enter username and password", 
-			ActionSpecs{ActionSpec{LOGIN, Params{ Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
-				    ActionSpec{QUIT, Params{}}}})
+			Query{"Enter username and password",
+				ActionSpecs{ActionSpec{LOGIN, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
+					ActionSpec{QUIT, Params{}}}})
 		if mess.Name == LOGIN {
-			o, err := f.Find(mess.Params[0].(string))
-			if err != nil {
-				panic(fmt.Sprint("Unable to search for ", mess.Params[0], " in ", f, ": ", err))
-			}
-			if o == nil {
+			if o := f.Find(mess.Params[0].(string)); o == nil {
 				o = f.Create(mess.Params[0].(string), mess.Params[1].(string))
 				self.send(Query{Desc: fmt.Sprint("Created new account ", mess.Params[0])})
 				return o
@@ -114,9 +111,9 @@ func (self *conn) authenticate(f Finder) Object {
 					return o
 				} else {
 					self.send(
-						Query{"Bad username or password", 
-						ActionSpecs{ActionSpec{LOGIN, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
-							    ActionSpec{QUIT, Params{}}}})
+						Query{"Bad username or password",
+							ActionSpecs{ActionSpec{LOGIN, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
+								ActionSpec{QUIT, Params{}}}})
 				}
 			}
 		} else if mess.Name == QUIT {
@@ -125,4 +122,3 @@ func (self *conn) authenticate(f Finder) Object {
 	}
 	return nil
 }
-

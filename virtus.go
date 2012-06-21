@@ -1,4 +1,3 @@
-
 package virtus
 
 /*
@@ -27,16 +26,16 @@ type Port interface {
 }
 
 type Finder interface {
-	Find(string) (Object, error)
+	Find(string) Object
 	Create(string, string) Object
 }
 
 type Persistence interface {
-	Get(string) ([]byte, error)
-	Del(string) (int64, error)
-	Set(string, []byte) error
-	GetMembers(string) ([][]byte, error)
-	SetMember(string, []byte) error
+	Get(string) ([]byte, bool)
+	Del(string)
+	Set(string, []byte)
+	GetMembers(string) [][]byte
+	SetMember(string, []byte)
 }
 
 /*
@@ -61,6 +60,7 @@ type Param struct {
 	Name string
 	Type string
 }
+
 func (self Param) Validate(t Thing) bool {
 	if self.Type == "s" {
 		_, ok := t.(string)
@@ -74,7 +74,9 @@ func (self Param) Validate(t Thing) bool {
 	}
 	return false
 }
+
 type Params []Param
+
 func (self Params) Validate(a Action) bool {
 	if len(a.Params) != len(self) {
 		return false
@@ -88,15 +90,18 @@ func (self Params) Validate(a Action) bool {
 }
 
 type ActionSpec struct {
-	Name string
+	Name   string
 	Params Params
 }
+
 func (self ActionSpec) Validate(a Action) bool {
 	return a.Name == self.Name && self.Params.Validate(a)
 }
+
 type ActionSpecs []ActionSpec
+
 func (self ActionSpecs) Validate(a Action) bool {
-	for _, s := range(self) {
+	for _, s := range self {
 		if s.Validate(a) {
 			return true
 		}
@@ -105,15 +110,15 @@ func (self ActionSpecs) Validate(a Action) bool {
 }
 
 type Query struct {
-	Desc string
+	Desc        string
 	ActionSpecs ActionSpecs
 }
+
 func (self Query) Validate(a Action) bool {
 	return self.ActionSpecs.Validate(a)
 }
 
 type Action struct {
-	Name string
+	Name   string
 	Params []Thing
 }
-
