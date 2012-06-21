@@ -1,20 +1,67 @@
-package main
 
-import (
-	"github.com/simonz05/godis"
-)
+package virtus
 
-type thing interface{}
-type hash map[string]thing
-type ary []thing
+/*
+ * Core
+ */
 
-type port chan thing
+type Thing interface{}
 
-type param struct {
+type Hash map[string]Thing
+
+type Message interface {
+	Payload() Thing
+	ReturnPath() chan Message
+}
+
+type Object interface {
+	Port() Port
+	Authenticate(string) bool
+	Start() error
+	Stop()
+}
+
+type Port interface {
+	Receive() Message
+	Send(Message)
+}
+
+type Finder interface {
+	Find(string) (Object, error)
+	Create(string, string) Object
+}
+
+type Persistence interface {
+	Get(string) ([]byte, error)
+	Del(string) (int64, error)
+	Set(string, []byte) error
+	GetMembers(string) ([][]byte, error)
+	SetMember(string, []byte) error
+}
+
+/*
+ * Utility
+ */
+
+const ROOT = "root"
+const CHILDREN_FORMAT = "%s.c"
+const USER_ID_FORMAT = "u:%s"
+
+const LOGIN = "Login"
+const QUIT = "Quit"
+const STRING = "s"
+const ACTION = "action"
+const ACTIONS = "actions"
+const DESC = "desc"
+
+const USERNAME = "Username"
+const PASSWORD = "Password"
+
+type Param struct {
 	Name string
 	Type string
 }
-func (self param) validate(t thing) bool {
+func (self Param) Validate(t Thing) bool {
 	if self.Type == "s" {
 		_, ok := t.(string)
 		return ok
@@ -27,49 +74,46 @@ func (self param) validate(t thing) bool {
 	}
 	return false
 }
-type params []param
-func (self params) validate(r mess) bool {
-	if len(r.Params) != len(self) {
+type Params []Param
+func (self Params) Validate(a Action) bool {
+	if len(a.Params) != len(self) {
 		return false
 	}
 	for index, p := range self {
-		if !p.validate(r.Params[index]) {
+		if !p.Validate(a.Params[index]) {
 			return false
 		}
 	}
 	return true
 }
 
-type action struct {
+type ActionSpec struct {
 	Name string
-	Params params
+	Params Params
 }
-func (self action) validate(r mess) bool {
-	return r.Action == self.Name && self.Params.validate(r)
+func (self ActionSpec) Validate(a Action) bool {
+	return a.Name == self.Name && self.Params.Validate(a)
 }
-type actions []action
-func (self actions) validate(r mess) bool {
-	for _, a := range(self) {
-		if a.validate(r) {
+type ActionSpecs []ActionSpec
+func (self ActionSpecs) Validate(a Action) bool {
+	for _, s := range(self) {
+		if s.Validate(a) {
 			return true
 		}
 	}
 	return false
 }
 
-type query struct {
+type Query struct {
 	Desc string
-	Actions actions
+	ActionSpecs ActionSpecs
 }
-func (self query) validate(r mess) bool {
-	return self.Actions.validate(r)
-}
-
-type mess struct {
-	Action string
-	Params []thing
+func (self Query) Validate(a Action) bool {
+	return self.ActionSpecs.Validate(a)
 }
 
-func main() {
-	loadAndBootRoot(godis.New("", 0, "")).webServe()
+type Action struct {
+	Name string
+	Params []Thing
 }
+
