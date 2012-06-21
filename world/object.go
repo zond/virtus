@@ -10,7 +10,6 @@ import (
 )
 
 type port chan Message
-
 func (self port) Receive() Message {
 	return <-self
 }
@@ -50,6 +49,7 @@ func (self *object) Start() error {
 	if err := self.startChildren(); err != nil {
 		return err
 	}
+	go self.run()
 	return nil
 }
 func (self *object) Stop() {
