@@ -24,6 +24,7 @@ type object struct {
 	port        Port
 	parent      Port
 	children    map[string]Port
+	neighbors   map[string]Port
 	state       Hash
 	fresh       bool
 	persistence Persistence
@@ -43,7 +44,7 @@ func findObject(p Persistence, id string) *object {
 	return nil
 }
 func createObject(p Persistence, id string) *object {
-	return &object{id: id, port: make(port), children: make(map[string]Port), persistence: p}
+	return &object{id: id, port: make(port), children: make(map[string]Port), neighbors: make(map[string]Port), persistence: p}
 }
 func (self *object) Start() error {
 	if err := self.startChildren(); err != nil {
