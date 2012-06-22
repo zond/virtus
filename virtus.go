@@ -4,43 +4,44 @@ package virtus
  * Core
  */
 
-type Thing interface{}
-
-type Hash map[string]Thing
-
-type Message interface {
-	Payload() Thing
-	ReturnPath() chan Message
-}
-
-type Object interface {
-	Port() Port
-	Authenticate(string) bool
-	Start() error
-	Stop()
-}
-
 type Port interface {
-	Receive() Message
+	Receive() (Message, bool)
 	Send(Message)
 }
 
 type Finder interface {
-	Find(string) Object
-	Create(string, string) Object
+	Find(string) Port
 }
 
 type Persistence interface {
 	Get(string) ([]byte, bool)
-	Del(string)
 	Set(string, []byte)
+	Del(string)
 	GetMembers(string) [][]byte
 	SetMember(string, []byte)
+}
+
+type Thing interface{}
+
+type Hash map[string]Thing
+
+type Message struct {
+	Payload Thing
+	ReturnPath Port
 }
 
 /*
  * Utility
  */
+
+type ChannelPort chan Message
+func (self ChannelPort) Receive() (Message, bool) {
+	m, ok := <- self
+	return m, ok
+}
+func (self ChannelPort) Send(m Message) {
+	self <- m
+}
 
 const ROOT = "root"
 const CHILDREN_FORMAT = "%s.c"
@@ -55,6 +56,8 @@ const DESC = "desc"
 
 const USERNAME = "Username"
 const PASSWORD = "Password"
+
+const MOVE = "Move"
 
 type Param struct {
 	Name string

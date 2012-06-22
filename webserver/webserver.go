@@ -10,21 +10,9 @@ import (
 
 type EOF string
 
-type message struct {
-	payload    Thing
-	returnPath chan Message
-}
-
-func (self *message) Payload() Thing {
-	return self.payload
-}
-func (self *message) ReturnPath() chan Message {
-	return self.returnPath
-}
-
-func Serve(f Finder) {
+func Serve(r Finder) {
 	err := http.ListenAndServe(":8080", websocket.Handler(func(ws *websocket.Conn) {
-		(&conn{ws}).start(f)
+		(&conn{ws, make(ChannelPort)}).start(r)
 	}))
 	if err != nil {
 		panic("While starting web socket server: " + err.Error())
@@ -33,6 +21,7 @@ func Serve(f Finder) {
 
 type conn struct {
 	*websocket.Conn
+	port Port
 }
 
 func (self *conn) send(t Thing) {
@@ -63,7 +52,7 @@ func (self *conn) query(q Query) Action {
 	}
 	return a
 }
-func (self *conn) start(f Finder) {
+func (self *conn) start(r Finder) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(EOF); !ok {
@@ -72,49 +61,33 @@ func (self *conn) start(f Finder) {
 		}
 		self.Close()
 	}()
-	r := self.authenticate(f)
-	if r == nil {
-		return
-	}
-	self.serve(r)
+	self.serve(self.find(r))
 }
-func (self *conn) listen(c chan Message) {
-	for m := range c {
-		self.send(m.Payload())
+func (self *conn) listen() {
+	m, ok := self.port.Receive()
+	for ok {
+		self.send(m.Payload)
+		m, ok = self.port.Receive()
 	}
 }
-func (self *conn) serve(o Object) {
-	returnPath := make(chan Message)
-	go self.listen(returnPath)
-	o.Start()
+func (self *conn) serve(p Port) {
+	go self.listen()
 	for {
-		var got Thing
+		var got Message
 		self.recv(&got)
-		o.Port().Send(&message{got, returnPath})
+		p.Send(Message{got, self.port})
 	}
 }
-func (self *conn) authenticate(f Finder) Object {
+func (self *conn) find(r Finder) Port {
 	for {
 		mess := self.query(
 			Query{"Enter username and password",
 				ActionSpecs{ActionSpec{LOGIN, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
 					ActionSpec{QUIT, Params{}}}})
 		if mess.Name == LOGIN {
-			if o := f.Find(mess.Params[0].(string)); o == nil {
-				o = f.Create(mess.Params[0].(string), mess.Params[1].(string))
-				self.send(Query{Desc: fmt.Sprint("Created new account ", mess.Params[0])})
-				return o
-			} else {
-				if o.Authenticate(mess.Params[1].(string)) {
-					self.send(Query{Desc: fmt.Sprint("Authenticated as ", mess.Params[0])})
-					return o
-				} else {
-					self.send(
-						Query{"Bad username or password",
-							ActionSpecs{ActionSpec{LOGIN, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
-								ActionSpec{QUIT, Params{}}}})
-				}
-			}
+			p := r.Find(fmt.Sprintf(USER_ID_FORMAT, mess.Params[0].(string)))
+			p.Send(Message{mess, self.port})
+			return p
 		} else if mess.Name == QUIT {
 			break
 		}
