@@ -1,134 +1,98 @@
-package virtus
 
-/*
- * Core
- */
+package main
 
-type Thing interface{}
+import (
+	"github.com/zond/cabinet"
+	"fmt"
+	"encoding/gob"
+	"bytes"
+)
 
-type Message struct {
-	Payload Thing
-	ReturnPath Port
+const (
+	BOOT = "boot"
+)
+
+type port chan message
+
+type ports map[string]port
+
+type thing interface{}
+
+type message struct {
+	typ string
+	payload thing
+	caller port
 }
 
-type Port chan Message
-
-type Finder interface {
-	Find(string) Port
-	Persist(string, Thing)
+type object struct {
+	port port
+	neighbors ports
 }
-
-/*
- * Utility
- */
-
-const ROOT = "root"
-const CHILDREN_FORMAT = "%s.c"
-const USER_ID_FORMAT = "u:%s"
-
-const LOGIN = "Login"
-const QUIT = "Quit"
-const STRING = "s"
-const ACTION = "action"
-const ACTIONS = "actions"
-const DESC = "desc"
-
-const USERNAME = "Username"
-const PASSWORD = "Password"
-
-type Hash map[string]Thing
-
-type Param struct {
-	Name string
-	Type string
+func newObject() *object {
+	return &object{}
 }
-
-func (self Param) Validate(t Thing) bool {
-	if self.Type == "s" {
-		_, ok := t.(string)
-		return ok
-	} else if self.Type == "i" {
-		_, ok := t.(int)
-		return ok
-	} else if self.Type == "f" {
-		_, ok := t.(float64)
-		return ok
+func (self *object) boot() {
+	self.port = make(port)
+	self.neighbors = make(ports)
+	go self.listen()
+	self.port <- message{BOOT, nil, self.port}
+}
+func (self *object) listen() {
+	for message := range self.port {
+		fmt.Println(self.port, " got ", message)
 	}
-	return false
 }
 
-type Params []Param
-
-func (self Params) Validate(a Action) bool {
-	if len(a.Params) != len(self) {
-		return false
-	}
-	for index, p := range self {
-		if !p.Validate(a.Params[index]) {
-			return false
+type loader struct {
+	objects map[string]*object
+	cabinet *cabinet.KCDB
+}
+func newLoader() *loader {
+	return &loader{make(map[string]*object), cabinet.New()}
+}
+func (self *loader) load() {
+	self.cabinet.Open("objects.kch", cabinet.KCOWRITER | cabinet.KCOCREATE)
+	self.bootObject("root")
+}
+func (self *loader) bootObject(name string) {
+	object := self.getObject(name)
+	object.boot()
+}
+func (self *loader) loadObject(name string) *object {
+	if b, err := self.cabinet.Get([]byte(name)); err == nil {
+		decoder := gob.NewDecoder(bytes.NewBuffer(b))
+		rval := &object{}
+		if err = decoder.Decode(rval); err != nil {
+			panic(fmt.Sprint("Unable to load ", string(b), " into ", rval, ": ", err))
 		}
+		return rval
 	}
-	return true
+	return nil
 }
-
-type ActionSpec struct {
-	Name   string
-	Params Params
-}
-
-func (self ActionSpec) Validate(a Action) bool {
-	return a.Name == self.Name && self.Params.Validate(a)
-}
-
-type ActionSpecs []ActionSpec
-
-func (self ActionSpecs) Validate(a Action) bool {
-	for _, s := range self {
-		if s.Validate(a) {
-			return true
-		}
+func (self *loader) getObject(name string) *object {
+	fmt.Println("loading ", name)
+	if object, ok := self.objects[name]; ok {
+		return object
 	}
-	return false
-}
-
-type Query struct {
-	Desc        string
-	ActionSpecs ActionSpecs
-}
-
-func (self Query) Validate(a Action) bool {
-	return self.ActionSpecs.Validate(a)
-}
-
-type Action struct {
-	Name   string
-	Params []Thing
-}
-
-type ChannelPort chan Message
-func (self ChannelPort) Receive(m *Message) bool {
-	if x, ok := <- self; ok {
-		(*m).Payload = x.Payload
-		(*m).ReturnPath = x.ReturnPath
-		return ok
+	if rval := self.loadObject(name); rval != nil {
+		return rval
 	}
-	return nil, false
+	return self.createObject(name)
 }
-func (self ChannelPort) Send(m Message) {
-	self <- m
-}
-
-type Portal struct {
-	Port
-}
-func (self *Portal) Query(q Query) (a Action, ok bool) {
-	for !q.Validate(a) {
-		a = Action{}
-		self.Port.Send(q)
-		if ok = self.Port.Receive(&a); !ok {
-			return nil, false
-		}
+func (self *loader) createObject(name string) *object {
+	rval := &object{}
+	buffer := &bytes.Buffer{}
+	encoder := gob.NewEncoder(buffer)
+	if err := encoder.Encode(rval); err != nil {
+		panic(fmt.Sprint("Unable to encode ", rval, " using ", encoder, ": ", err))
 	}
-	return a, true
+	if err := self.cabinet.Set([]byte(name), buffer.Bytes()); err != nil {
+		panic(fmt.Sprint("Unable to store ", rval, " in ", self.cabinet, ": ", err))
+	}
+	return rval
 }
 
+func main() {
+	l := newLoader()
+	l.load()
+}
