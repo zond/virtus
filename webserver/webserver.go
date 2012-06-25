@@ -12,7 +12,7 @@ type EOF string
 
 func Serve(r Finder) {
 	err := http.ListenAndServe(":8080", websocket.Handler(func(ws *websocket.Conn) {
-		(&conn{ws, make(ChannelPort)}).start(r)
+		(&conn{ws, Portal(make(ChannelPort))}).start(r)
 	}))
 	if err != nil {
 		panic("While starting web socket server: " + err.Error())
@@ -20,8 +20,8 @@ func Serve(r Finder) {
 }
 
 type conn struct {
-	*websocket.Conn
-	port Port
+	conn *websocket.Conn
+	port *Portal
 }
 
 func (self *conn) send(t Thing) {
@@ -44,14 +44,6 @@ func (self *conn) recv(t Thing) {
 		}
 	}
 }
-func (self *conn) query(q Query) Action {
-	var a Action
-	for !q.Validate(a) {
-		self.send(q)
-		self.recv(&a)
-	}
-	return a
-}
 func (self *conn) start(r Finder) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -64,16 +56,18 @@ func (self *conn) start(r Finder) {
 	self.serve(self.find(r))
 }
 func (self *conn) listen() {
-	m, ok := self.port.Receive()
-	for ok {
+	for {
+		m := Message{}
+		if ok := self.port.Receive(&m); !ok {
+			break
+		}
 		self.send(m.Payload)
-		m, ok = self.port.Receive()
 	}
 }
 func (self *conn) serve(p Port) {
 	go self.listen()
 	for {
-		var got Message
+		var got Thing
 		self.recv(&got)
 		p.Send(Message{got, self.port})
 	}
@@ -81,14 +75,15 @@ func (self *conn) serve(p Port) {
 func (self *conn) find(r Finder) Port {
 	for {
 		mess := self.query(
-			Query{"Enter username and password",
+			Query{"Login, Create account or Quit",
 				ActionSpecs{ActionSpec{LOGIN, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
-					ActionSpec{QUIT, Params{}}}})
-		if mess.Name == LOGIN {
+				            ActionSpec{CREATE, Params{Param{USERNAME, STRING}, Param{PASSWORD, STRING}}},
+					    ActionSpec{QUIT, Params{}}}})
+		if mess.Name != QUIT {
 			p := r.Find(fmt.Sprintf(USER_ID_FORMAT, mess.Params[0].(string)))
 			p.Send(Message{mess, self.port})
 			return p
-		} else if mess.Name == QUIT {
+		} else { 
 			break
 		}
 	}

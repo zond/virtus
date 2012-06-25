@@ -4,44 +4,23 @@ package virtus
  * Core
  */
 
-type Port interface {
-	Receive() (Message, bool)
-	Send(Message)
-}
-
-type Finder interface {
-	Find(string) Port
-}
-
-type Persistence interface {
-	Get(string) ([]byte, bool)
-	Set(string, []byte)
-	Del(string)
-	GetMembers(string) [][]byte
-	SetMember(string, []byte)
-}
-
 type Thing interface{}
-
-type Hash map[string]Thing
 
 type Message struct {
 	Payload Thing
 	ReturnPath Port
 }
 
+type Port chan Message
+
+type Finder interface {
+	Find(string) Port
+	Persist(string, Thing)
+}
+
 /*
  * Utility
  */
-
-type ChannelPort chan Message
-func (self ChannelPort) Receive() (Message, bool) {
-	m, ok := <- self
-	return m, ok
-}
-func (self ChannelPort) Send(m Message) {
-	self <- m
-}
 
 const ROOT = "root"
 const CHILDREN_FORMAT = "%s.c"
@@ -57,7 +36,7 @@ const DESC = "desc"
 const USERNAME = "Username"
 const PASSWORD = "Password"
 
-const MOVE = "Move"
+type Hash map[string]Thing
 
 type Param struct {
 	Name string
@@ -125,3 +104,31 @@ type Action struct {
 	Name   string
 	Params []Thing
 }
+
+type ChannelPort chan Message
+func (self ChannelPort) Receive(m *Message) bool {
+	if x, ok := <- self; ok {
+		(*m).Payload = x.Payload
+		(*m).ReturnPath = x.ReturnPath
+		return ok
+	}
+	return nil, false
+}
+func (self ChannelPort) Send(m Message) {
+	self <- m
+}
+
+type Portal struct {
+	Port
+}
+func (self *Portal) Query(q Query) (a Action, ok bool) {
+	for !q.Validate(a) {
+		a = Action{}
+		self.Port.Send(q)
+		if ok = self.Port.Receive(&a); !ok {
+			return nil, false
+		}
+	}
+	return a, true
+}
+
